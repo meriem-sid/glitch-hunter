@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Glitch Hunter</title>
+    <style>
+        body { background-color: black; margin: 0; overflow: hidden; }
+    </style>
+    <script src="vendor/mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="vendor/mediapipe/hands/hands.js"></script>
+</head>
+<body>
+    <video id="webcam" autoplay playsinline style="position: absolute; top: 0; left: 0; width: 320px; z-index: 10;"></video>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
