@@ -1,6 +1,6 @@
 // All mutable game data lives here. Physics mutates it, the renderer only reads it.
 import { createRunner } from "./runner.js";
-import { createFingerFilter } from "./smoothing.js";
+import { createFingerFilter, loadBladeFeel } from "./smoothing.js";
 
 export const ENTITY_SIZE = 40;
 export const TRAIL_LENGTH = 10;
@@ -11,6 +11,8 @@ export function createState() {
         finger: { x: 0, y: 0 },      // smoothed fingertip: where the blade is (see smoothing.js)
         rawFinger: { x: 0, y: 0 },   // fingertip exactly as the camera last reported it
         fingerFilter: createFingerFilter(),
+        bladeFeel: loadBladeFeel(), // which smoothing preset (see smoothing.js), cycled with B
+        notice: { text: "", timer: 0 }, // short message at the top of the screen (e.g. after pressing B)
         prevFinger: { x: 0, y: 0 }, // fingertip last frame, for swipe hits
         prevHandVisible: false,
         bugs: [],   // falling bugs; the first ones are dropped in as the round starts (see physics.js)
@@ -66,7 +68,10 @@ export function createState() {
         quality: "high",     // current visual quality, lowered automatically if the frame rate drops (see perf.js)
         qualityLock: "auto", // "auto", or a level locked with the Q key
         fps: 60,
-        showPerf: false      // F key: show the FPS overlay
+        showPerf: false,     // F key: show the FPS overlay
+        showTracking: false, // D key: show raw camera tracking behind the blade (for diagnosing it)
+        trackingFps: 0,      // results per second from the camera + hand tracker
+        trackingSamples: []  // recent raw fingertip/knuckle positions, for the D-key view
     };
 }
 

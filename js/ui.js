@@ -2,6 +2,7 @@
 // Also handles typing a name for the leaderboard.
 import { addScore, NAME_MAX_LENGTH } from "./leaderboard.js";
 import { QUALITY_LOCKS } from "./perf.js";
+import { cycleBladeFeel } from "./smoothing.js";
 
 export const BUTTON_HOLD_FRAMES = 90; // ~1.5 s at 60fps
 
@@ -22,6 +23,12 @@ export function listenForKeys(canvas, state) {
         // volunteer keys: F shows the FPS overlay, Q cycles auto / high / medium / low quality
         if (event.code === "KeyF") {
             state.showPerf = !state.showPerf;
+        }
+        if (event.code === "KeyB") {
+            state.notice = { text: "BLADE: " + cycleBladeFeel(state), timer: 120 };
+        }
+        if (event.code === "KeyD") {
+            state.showTracking = !state.showTracking;
         }
         if (event.code === "KeyQ") {
             let next = (QUALITY_LOCKS.indexOf(state.qualityLock) + 1) % QUALITY_LOCKS.length;

@@ -1,5 +1,6 @@
 // ITC powers: hold a hand pose to cast. Physics reads the active timers; this file casts and ticks them.
 import { sliceBug, respawn, spawnParticles, isOnScreen } from "./physics.js";
+import { BOMB_COLOR } from "./enemies.js";
 
 // durations and cooldowns are in frames (60 = 1 second)
 export const SPELLS = {
@@ -51,7 +52,7 @@ function cast(state, key, width) {
         // wipe the screen: every visible bug counts as sliced, every visible bomb is destroyed without costing a life
         for (let i = 0; i < state.bombs.length; i = i + 1) {
             if (!isOnScreen(state.bombs[i])) continue;
-            spawnParticles(state, state.bombs[i], "magenta", 30);
+            spawnParticles(state, state.bombs[i], BOMB_COLOR, 30);
             respawn(state.bombs[i], width);
         }
         for (let i = 0; i < state.bugs.length; i = i + 1) {

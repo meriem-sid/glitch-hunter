@@ -2,7 +2,7 @@
 import { createState, resetRound, scaleWorld } from "./state.js";
 import { startHandTracking } from "./input.js";
 import { update, updateAmbient } from "./physics.js";
-import { renderWorld, renderStartScreen, renderGameOverScreen, drawPerfOverlay } from "./renderer.js";
+import { renderWorld, renderStartScreen, renderGameOverScreen, drawPerfOverlay, drawTrackingDebug, drawNotice } from "./renderer.js";
 import { getButtonRect, updateButton, listenForKeys, consumeKeyPress } from "./ui.js";
 import { loadLeaderboard, qualifies, checkNewRecord, isNewTop } from "./leaderboard.js";
 import { updateSpells } from "./spells.js";
@@ -109,11 +109,14 @@ function gameLoop(now = performance.now()) {
     updateGlitch(state, step);
     applyGlitch(ctx, state);
     drawPerfOverlay(ctx, state);
+    drawTrackingDebug(ctx, state);
+    drawNotice(ctx, state);
+    state.notice.timer = Math.max(0, state.notice.timer - step);
 
     // shake, popups and sounds for everything that happened this frame
     applyEffects(state, canvas.width, canvas.height);
     updateEffects(state, step, canvas.width);
-    updateRunner(state, step);
+    updateRunner(state, step, canvas.width);
     state.soundStatus = getSoundStatus();
     startMusic(); // does nothing until sound is unlocked, or once it's already playing
     setMusicMood({ screen: state.screen, level: state.level, fever: !!state.fever, boss: !!state.boss });

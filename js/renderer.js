@@ -1,6 +1,6 @@
 // Everything that draws to the canvas. Reads state, never changes it.
 import { BUTTON_HOLD_FRAMES } from "./ui.js";
-import { BUG_TYPES, getBugAngle } from "./enemies.js";
+import { BUG_TYPES, BOMB_COLOR, getBugAngle } from "./enemies.js";
 import { QUALITY, getParticleSprite } from "./perf.js";
 import { getMultiplier } from "./physics.js";
 import { SPELLS } from "./spells.js";
@@ -10,8 +10,12 @@ import { POWERUP_TYPES } from "./powerups.js";
 import { drawRunner } from "./runner.js";
 import { getRank } from "./leaderboard.js";
 import { IS_PHONE } from "./device.js";
+import { BLADE_FEELS } from "./smoothing.js";
 
 const GOLD = "#ffd700";
+const HEART_COLOR = "#ff5aa5";
+const BUG_LEGS = true; // false: plain squares, as before (legs and antennae make them read as bugs)
+const BOMB_WARNING_DISTANCE = 140; // a bomb this close above the screen shows a warning sign at the top edge
 
 // QR code to the online version (made by tools/make_qr.py), shown on the stand's menus.
 const PLAY_URL_TEXT = "meriem-sid.github.io/glitch-hunter";
@@ -353,7 +357,7 @@ export function renderStartScreen(ctx, state, buttonRect) {
     ctx.textAlign = "center";
     ctx.font = "26px Arial";
     ctx.fillStyle = "white";
-    ctx.fillText("Slice bugs in a row for a combo. 3 bombs and you are out.", canvas.width / 2, titleY + 55);
+    ctx.fillText("Slice the bugs. Dodge the red bombs: 3 hits and you're out.", canvas.width / 2, titleY + 55);
     ctx.font = "20px Arial";
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     ctx.fillText("ITC powers: hold an OPEN PALM, a PEACE SIGN or a FIST", canvas.width / 2, titleY + 88);
@@ -710,6 +714,7 @@ function drawBug(ctx, state) {
         ctx.shadowBlur = bug.type === "gold" ? 30 : 15;
         ctx.shadowColor = bugType.color;
         ctx.strokeStyle = bugType.color;
+        if (BUG_LEGS) drawLegs(ctx, state, bug, half);
         ctx.lineWidth = bug.type === "fast" ? 3 : 4;
         ctx.strokeRect(-half, -half, bug.size, bug.size);
 
@@ -722,15 +727,18 @@ function drawBug(ctx, state) {
         }
 
         if (bug.type === "volatile") {
-            // a pulsing X instead of the inner box: this one explodes
+            // a pulsing lightning bolt instead of the inner box: slice it and it blows up its neighbours
             ctx.rotate(-angle);
-            ctx.globalAlpha = 0.5 + 0.5 * Math.sin(state.angle * 8);
+            ctx.globalAlpha = 0.85 + 0.15 * Math.sin(state.angle * 8);
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = "#fff4d0"; // near white-hot, so the bolt stands out inside the orange outline
             ctx.beginPath();
-            ctx.moveTo(-half * 0.55, -half * 0.55);
-            ctx.lineTo(half * 0.55, half * 0.55);
-            ctx.moveTo(half * 0.55, -half * 0.55);
-            ctx.lineTo(-half * 0.55, half * 0.55);
-            ctx.stroke();
+            let bolt = [[0.18, -0.78], [-0.36, 0.1], [0.02, 0.1], [-0.18, 0.78], [0.38, -0.14], [0.02, -0.14]];
+            for (let p = 0; p < bolt.length; p = p + 1) {
+                ctx.lineTo(bolt[p][0] * half, bolt[p][1] * half);
+            }
+            ctx.closePath();
+            ctx.fill();
         } else {
             //draw an inner layered box that spins the opposite direction
             ctx.rotate(-angle * 2);
@@ -749,6 +757,29 @@ function drawBug(ctx, state) {
 
         ctx.restore();
     }
+}
+
+// Six little legs that wiggle, and two antennae, in the bug's colour (drawn in the bug's own
+// rotated frame, so they tumble with it).
+function drawLegs(ctx, state, bug, half) {
+    ctx.save();
+    ctx.lineWidth = Math.max(1.5, half * 0.1);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let side = -1; side <= 1; side = side + 2) {
+        for (let k = -1; k <= 1; k = k + 1) {
+            let wiggle = Math.sin(state.angle * 10 + k * 2 + side + bug.spin) * half * 0.15;
+            let y = k * half * 0.55;
+            ctx.moveTo(side * half, y);
+            ctx.lineTo(side * half * 1.35, y - half * 0.15 + wiggle);   // knee
+            ctx.lineTo(side * half * 1.6, y + half * 0.25 + wiggle);    // foot
+        }
+        // antenna from the top corner, curling outwards
+        ctx.moveTo(side * half * 0.45, -half);
+        ctx.quadraticCurveTo(side * half * 0.5, -half * 1.6, side * half * 0.95, -half * 1.7);
+    }
+    ctx.stroke();
+    ctx.restore();
 }
 
 // Pieces of sliced bugs: a faint fill and a glowing outline, fading out at the end of their life.
@@ -790,28 +821,104 @@ function drawDebris(ctx, state) {
     }
 }
 
-// === WIREFRAME BOMBS ===
+// === BOMBS ===
+// Round, spiky and red, so they can't be mistaken for bugs: a mine with a lit fuse and a core
+// that blinks faster the lower it falls.
 function drawBomb(ctx, state) {
+    const height = ctx.canvas.height;
     for (let i = 0; i < state.bombs.length; i = i + 1) {
         let bomb = state.bombs[i];
-        let angle = state.angle + bomb.spin;
+        let half = bomb.size / 2;
+        let x = bomb.x + half;
+        let y = bomb.y + half;
+
+        if (bomb.y < -bomb.size * 0.5) {
+            // still above the screen: a warning sign at the top edge, just before it drops in
+            if (bomb.y > -bomb.size - BOMB_WARNING_DISTANCE) drawBombWarning(ctx, state, x);
+            continue;
+        }
+
+        let r = bomb.size * 0.38;
+        let depth = Math.max(0, Math.min(1, bomb.y / height));
+        let pulse = 0.5 + 0.5 * Math.sin(state.angle * (4 + depth * 14) + bomb.spin);
 
         ctx.save();
-        let half = bomb.size / 2;
-        ctx.translate(bomb.x + half, bomb.y + half);
-        ctx.rotate(-angle);
+        ctx.translate(x, y);
+        ctx.shadowColor = BOMB_COLOR;
+        ctx.shadowBlur = 12 + 14 * pulse;
+        ctx.strokeStyle = BOMB_COLOR;
+        ctx.lineWidth = 3;
+        ctx.lineJoin = "round";
 
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = "magenta";
-        ctx.strokeStyle = "magenta";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(-half, -half, bomb.size, bomb.size);
+        // eight spikes, slowly turning
+        ctx.save();
+        ctx.rotate((state.angle + bomb.spin) * 0.5);
+        ctx.beginPath();
+        for (let k = 0; k < 8; k = k + 1) {
+            let a = k * Math.PI / 4;
+            ctx.moveTo(Math.cos(a - 0.22) * r, Math.sin(a - 0.22) * r);
+            ctx.lineTo(Math.cos(a) * r * 1.5, Math.sin(a) * r * 1.5);
+            ctx.lineTo(Math.cos(a + 0.22) * r, Math.sin(a + 0.22) * r);
+        }
+        ctx.stroke();
+        ctx.restore();
 
-        ctx.rotate(angle * 3);
-        ctx.strokeRect(-5, -5, 10, 10);
+        // round body
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, 42, 42, 0.18)";
+        ctx.fill();
+        ctx.stroke();
+
+        // blinking core
+        ctx.fillStyle = "rgba(255, 210, 210, " + (0.35 + 0.65 * pulse) + ")";
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.32, 0, Math.PI * 2);
+        ctx.fill();
+
+        // fuse with a flickering spark, always on top
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#ffcc66";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(r * 0.45, -r * 0.85);
+        ctx.quadraticCurveTo(r * 1.1, -r * 1.1, r * 0.95, -r * 1.75);
+        ctx.stroke();
+        let spark = 2 + Math.random() * 3;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "orange";
+        ctx.fillStyle = "#fff2a0";
+        ctx.beginPath();
+        ctx.arc(r * 0.95, -r * 1.75, spark, 0, Math.PI * 2);
+        ctx.fill();
 
         ctx.restore();
     }
+}
+
+// Blinking red warning triangle at the top edge, above where a bomb is about to drop in.
+function drawBombWarning(ctx, state, x) {
+    let size = 26;
+    let top = 8;
+    ctx.save();
+    ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(state.angle * 6));
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = BOMB_COLOR;
+    ctx.strokeStyle = BOMB_COLOR;
+    ctx.fillStyle = BOMB_COLOR;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x + size / 2, top + size * 0.9);
+    ctx.lineTo(x - size / 2, top + size * 0.9);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 16px Arial";
+    ctx.fillText("!", x, top + size * 0.58);
+    ctx.restore();
 }
 
 // === BLADE TRAIL ===
@@ -942,6 +1049,69 @@ function drawParticles(ctx, state) {
     ctx.restore();
 }
 
+// Diagnostic view (D key): what the camera tracker reported over the last 1.5 s, behind the blade.
+// Red dots: the raw fingertip, one per camera frame. Yellow: the index knuckle. If the red dots
+// dip while the yellow ones stay level, the tracker is losing the fingertip (motion blur, or the
+// finger bending), not the game.
+export function drawTrackingDebug(ctx, state) {
+    if (!state.showTracking) return;
+    let samples = state.trackingSamples;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    for (let pass = 0; pass < 2; pass = pass + 1) {
+        let color = pass === 0 ? "yellow" : "red";
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < samples.length; i = i + 1) {
+            let x = pass === 0 ? samples[i].kx : samples[i].x;
+            let y = pass === 0 ? samples[i].ky : samples[i].y;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        for (let i = 0; i < samples.length; i = i + 1) {
+            ctx.beginPath();
+            ctx.arc(pass === 0 ? samples[i].kx : samples[i].x, pass === 0 ? samples[i].ky : samples[i].y, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    let fps = Math.round(state.trackingFps);
+    let lines = [
+        "TRACKING VIEW (D to hide)",
+        "camera tracking: " + fps + " fps" + (fps < 20 ? "  - LOW: add light or reduce glare" : ""),
+        "red = raw fingertip   yellow = knuckle   cyan = blade",
+        "blade feel: " + BLADE_FEELS[state.bladeFeel].name + " (B to change)"
+    ];
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.fillRect(ctx.canvas.width / 2 - 230, 86, 460, 96);
+    ctx.textAlign = "center";
+    ctx.font = "15px monospace";
+    for (let i = 0; i < lines.length; i = i + 1) {
+        ctx.fillStyle = i === 1 && fps < 20 ? "orange" : "white";
+        ctx.fillText(lines[i], ctx.canvas.width / 2, 106 + i * 22);
+    }
+    ctx.restore();
+}
+
+// Short message at the top centre (e.g. "BLADE: SMOOTH" after pressing B), fading out.
+export function drawNotice(ctx, state) {
+    if (state.notice.timer <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, state.notice.timer / 20);
+    ctx.shadowBlur = 0;
+    ctx.font = "bold 22px Arial";
+    let width = ctx.measureText(state.notice.text).width + 30;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+    ctx.fillRect(ctx.canvas.width / 2 - width / 2, 190, width, 40);
+    ctx.fillStyle = "cyan";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(state.notice.text, ctx.canvas.width / 2, 210);
+    ctx.restore();
+}
+
 // Volunteer overlay (F key): frame rate, quality level and how much is on screen.
 export function drawPerfOverlay(ctx, state) {
     if (!state.showPerf) return;
@@ -965,6 +1135,18 @@ export function drawPerfOverlay(ctx, state) {
     ctx.restore();
 }
 
+// A filled heart, `size` pixels tall, with its top centre at (x, y).
+function drawHeart(ctx, x, y, size) {
+    let w = size * 0.55;
+    ctx.beginPath();
+    ctx.moveTo(x, y + size * 0.3);
+    ctx.bezierCurveTo(x, y, x - w, y, x - w, y + size * 0.3);
+    ctx.bezierCurveTo(x - w, y + size * 0.6, x, y + size * 0.75, x, y + size);
+    ctx.bezierCurveTo(x, y + size * 0.75, x + w, y + size * 0.6, x + w, y + size * 0.3);
+    ctx.bezierCurveTo(x + w, y, x, y, x, y + size * 0.3);
+    ctx.fill();
+}
+
 function drawHud(ctx, state) {
     const canvas = ctx.canvas;
     let right = canvas.width - 30;
@@ -976,16 +1158,15 @@ function drawHud(ctx, state) {
     ctx.fillStyle = "white";
     ctx.fillText("Score: " + state.score, right, 50);
 
-    // one magenta wireframe box per life left
+    // one heart per life left
     ctx.shadowBlur = 10;
-    ctx.shadowColor = "magenta";
-    ctx.strokeStyle = "magenta";
-    ctx.lineWidth = 3;
+    ctx.shadowColor = HEART_COLOR;
+    ctx.fillStyle = HEART_COLOR;
     for (let i = 0; i < state.lives; i = i + 1) {
-        ctx.strokeRect(right - 20 - i * 32, 70, 20, 20);
+        drawHeart(ctx, right - 10 - i * 32, 68, 22);
     }
 
-    // level, to the left of the life boxes
+    // level, to the left of the hearts
     ctx.shadowBlur = 0;
     ctx.font = "bold 20px Arial";
     ctx.fillStyle = "hsl(" + Math.round(getThemeHue(state)) + ", 100%, 70%)";

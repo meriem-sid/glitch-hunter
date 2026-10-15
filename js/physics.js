@@ -1,6 +1,6 @@
 // Movement, collisions, scoring and particle simulation. No drawing happens here.
 import { TRAIL_LENGTH, makeEntity } from "./state.js";
-import { BUG_TYPES, chooseBugType } from "./enemies.js";
+import { BUG_TYPES, BOMB_COLOR, chooseBugType } from "./enemies.js";
 import { shatterBug, updateDebris } from "./debris.js";
 import { QUALITY } from "./perf.js";
 import { getLevel, getGridSpeed } from "./theme.js";
@@ -15,7 +15,8 @@ const MAX_BUGS = 4;       // ...up to 4
 const BOMBS_EVERY = 20;   // one more bomb every 20 slices...
 const MAX_BOMBS = 3;      // ...up to 3
 const SPAWN_SPREAD = 250; // respawns start up to this many pixels above the screen, so arrivals are staggered
-const PLAY_MARGIN = 0.15; // nothing drops in the outer 15% on each side: the play area is the middle 70%
+const PLAY_MARGIN = 0.18; // nothing drops in the outer 18% on each side: the play area is the middle 64%
+const CENTER_BIAS = 0.5;  // share of drops that favour the middle; the rest spread evenly across the play area
 const MAX_SWIPE_FRACTION = 0.5; // a fingertip jump wider than half the screen in one frame is a tracking glitch
 const SHOCKWAVE_RADIUS = 180;  // a bomb hit throws bugs this close away, and sets off other bombs
 const SHOCKWAVE_PUSH = 14;     // knockback speed right next to the blast, fading to 0 at the edge
@@ -119,14 +120,14 @@ export function update(state, width, height, step) {
             // SHIELD power-up: the bomb still goes off, but the shield takes the hit instead of a life
             if (state.powers.shield) {
                 state.powers.shield = false;
-                spawnParticles(state, bomb, "magenta");
+                spawnParticles(state, bomb, BOMB_COLOR);
                 state.events.push({ type: "shieldBreak", x: bomb.x + bomb.size / 2, y: bomb.y + bomb.size / 2 });
                 shockwave(state, bomb, width);
                 respawn(bomb, width);
                 continue;
             }
             breakCombo(state);
-            spawnParticles(state, bomb, "magenta");
+            spawnParticles(state, bomb, BOMB_COLOR);
             state.events.push({ type: "bomb", x: bomb.x + bomb.size / 2, y: bomb.y + bomb.size / 2 });
             shockwave(state, bomb, width);
             loseLife(state);
@@ -293,7 +294,7 @@ function shockwave(state, hitBomb, width) {
 
 // A bomb blown up by something other than the player: no life lost.
 function destroyBomb(state, bomb, width) {
-    spawnParticles(state, bomb, "magenta", 15);
+    spawnParticles(state, bomb, BOMB_COLOR, 15);
     state.events.push({ type: "chainBomb", x: bomb.x + bomb.size / 2, y: bomb.y + bomb.size / 2 });
     respawn(bomb, width);
 }
@@ -401,10 +402,15 @@ export function segmentHitsBox(seg, entity, margin = 0) {
 
 // A random x for something `size` wide to drop at, inside the middle of the screen: far edges are
 // awkward to reach with an arm, and the webcam preview and side panels cover parts of them.
+// Most things land near the middle (easy to follow for someone standing back from the screen),
+// some still reach the sides of the play area.
 export function spawnX(width, size) {
     let left = width * PLAY_MARGIN;
     let right = width * (1 - PLAY_MARGIN) - size;
-    return left + Math.random() * Math.max(0, right - left);
+    let spot = Math.random() < CENTER_BIAS
+        ? (Math.random() + Math.random()) / 2  // averaging two rolls favours the middle
+        : Math.random();                       // anywhere in the play area
+    return left + spot * Math.max(0, right - left);
 }
 
 // Send an entity back above the top of the screen. The random height, speed and spin

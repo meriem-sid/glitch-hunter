@@ -1,6 +1,6 @@
 // Game-feel effects driven by this frame's events: screen shake, hit-stop and floating score popups.
 // All amounts are in 60fps frames / pixels, counted with `step` like everything else.
-import { BUG_TYPES } from "./enemies.js";
+import { BUG_TYPES, BOMB_COLOR } from "./enemies.js";
 import { getThemeHue } from "./theme.js";
 import { triggerGlitch } from "./glitch.js";
 import { QUALITY } from "./perf.js";
@@ -32,16 +32,16 @@ export function applyEffects(state, width = 1280, height = 720) {
         } else if (event.type === "armor") {
             addPopup(state, event.x, event.y, "CRACK", "white", 10);
         } else if (event.type === "bomb") {
-            addPopup(state, event.x, event.y, "-1 LIFE", "magenta", 30);
-            addRing(state, event.x, event.y, 180, "magenta"); // the shockwave (see physics.js)
+            addPopup(state, event.x, event.y, "-1 LIFE", BOMB_COLOR, 30);
+            addRing(state, event.x, event.y, 180, BOMB_COLOR); // the shockwave (see physics.js)
             shake(state, SHAKE.bomb);
             state.hitStop = BOMB_HIT_STOP;
             triggerGlitch(state, 0.8, 18);
         } else if (event.type === "chainBomb") {
-            addRing(state, event.x, event.y, 110, "magenta");
+            addRing(state, event.x, event.y, 110, BOMB_COLOR);
             shake(state, SHAKE.chainBomb);
         } else if (event.type === "volatile") {
-            addRing(state, event.x, event.y, 160, "#ff3030");
+            addRing(state, event.x, event.y, 160, BUG_TYPES.volatile.color);
             shake(state, SHAKE.volatile);
             triggerGlitch(state, 0.4, 10);
         } else if (event.type === "gameOver") {

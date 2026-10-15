@@ -10,9 +10,11 @@ import { IS_PHONE } from "./device.js";
 // Set to false for a camera that already mirrors its image.
 const MIRROR = true;
 
+const TRACKING_HISTORY_MS = 1500; // the D-key view shows the last 1.5 s of camera samples
+
 // handCanvas: the overlay on the webcam preview where the tracked hand is drawn.
 export function startHandTracking(videoElement, canvas, state, handCanvas) {
-    drawHandView(handCanvas, videoElement, null, "none", MIRROR, "STARTING CAMERA...");
+    drawHandView(handCanvas, videoElement, null, "none", MIRROR, { message: "STARTING CAMERA..." });
 
     if (MIRROR) {
         videoElement.style.transform = "scaleX(-1)"; // keep the preview consistent with the controls
@@ -28,16 +30,31 @@ export function startHandTracking(videoElement, canvas, state, handCanvas) {
         minTrackingConfidence: 0.5
     });
 
+    let lastResult = 0;
     hands.onResults((results) => {
+        // how often the camera + tracker actually deliver a result (dim light lowers this a lot)
+        let now = performance.now();
+        if (lastResult) state.trackingFps = state.trackingFps * 0.9 + (1000 / (now - lastResult)) * 0.1;
+        lastResult = now;
+
         if (results.multiHandLandmarks.length > 0) {
             const hand = results.multiHandLandmarks[0];
 
-            // Target index finger tip (landmark 8)
-            const indexFinger = hand[8];
-
-            let x = MIRROR ? 1 - indexFinger.x : indexFinger.x;
+            // the index fingertip (landmark 8)
+            const tip = hand[8];
+            let x = MIRROR ? 1 - tip.x : tip.x;
             state.rawFinger.x = x * canvas.width;
-            state.rawFinger.y = indexFinger.y * canvas.height;
+            state.rawFinger.y = tip.y * canvas.height;
+
+            // for the D-key tracking view: the raw fingertip and the index knuckle, as the camera saw them
+            const knuckle = hand[5];
+            state.trackingSamples.push({
+                t: now, x: state.rawFinger.x, y: state.rawFinger.y,
+                kx: (MIRROR ? 1 - knuckle.x : knuckle.x) * canvas.width, ky: knuckle.y * canvas.height
+            });
+            while (state.trackingSamples.length && now - state.trackingSamples[0].t > TRACKING_HISTORY_MS) {
+                state.trackingSamples.shift();
+            }
             state.handVisible = true;
             state.pose = detectPose(hand);
             drawHandView(handCanvas, videoElement, hand, state.pose, MIRROR);

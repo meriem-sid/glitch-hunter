@@ -14,8 +14,9 @@ const INDEX_FINGER = [5, 6, 7, 8];
 const FINGERTIP = 8;
 
 // `hand`: the 21 landmarks (0-1 coordinates), or null when no hand is seen.
-// `message`: shown instead of "SHOW YOUR HAND" (e.g. while the camera is still starting).
-export function drawHandView(canvas, video, hand, pose, mirror, message = "SHOW YOUR HAND") {
+// options.message: shown instead of "SHOW YOUR HAND" (e.g. while the camera is still starting).
+export function drawHandView(canvas, video, hand, pose, mirror, options = {}) {
+    let message = options.message || "SHOW YOUR HAND";
     // match the preview's shape (some webcams are 4:3, others 16:9)
     if (video.videoWidth > 0) {
         let height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
