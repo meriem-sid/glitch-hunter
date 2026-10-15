@@ -2,14 +2,22 @@
 <html>
 <head>
     <title>Glitch Hunter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <style>
-        body { background-color: black; margin: 0; overflow: hidden; }
+        body { background-color: black; margin: 0; overflow: hidden; touch-action: none; }
+        #gameCanvas { display: block; }
+        /* phones and small windows: a smaller webcam preview so it doesn't cover the game */
+        @media (max-width: 700px), (max-height: 500px) {
+            #webcam, #handView { width: 130px !important; }
+        }
     </style>
     <script src="vendor/mediapipe/camera_utils/camera_utils.js"></script>
     <script src="vendor/mediapipe/hands/hands.js"></script>
 </head>
 <body>
     <video id="webcam" autoplay playsinline style="position: absolute; top: 0; left: 0; width: 320px; z-index: 10;"></video>
+    <!-- the tracked hand, drawn over the webcam preview (see js/handview.js) -->
+    <canvas id="handView" width="320" height="240" style="position: absolute; top: 0; left: 0; width: 320px; z-index: 11; pointer-events: none;"></canvas>
 
     <canvas id="gameCanvas"></canvas>
 

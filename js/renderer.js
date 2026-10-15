@@ -9,8 +9,46 @@ import { getThemeHue, getPulse } from "./theme.js";
 import { POWERUP_TYPES } from "./powerups.js";
 import { drawRunner } from "./runner.js";
 import { getRank } from "./leaderboard.js";
+import { IS_PHONE } from "./device.js";
 
 const GOLD = "#ffd700";
+
+// QR code to the online version (made by tools/make_qr.py), shown on the stand's menus.
+const PLAY_URL_TEXT = "meriem-sid.github.io/glitch-hunter";
+let qrImage = null;
+if (typeof Image !== "undefined" && !IS_PHONE) { // no point showing it on a phone that's already playing
+    let image = new Image();
+    image.onload = () => { qrImage = image; };
+    image.src = "assets/qr-play.png";
+}
+
+// Bottom-left corner of the menus: "PLAY ON YOUR PHONE" above the QR code, the address below.
+function drawPhoneQr(ctx) {
+    if (!qrImage) return;
+    const canvas = ctx.canvas;
+    let size = Math.round(Math.min(170, canvas.height * 0.22));
+    let x = 24;
+    let y = canvas.height - size - 40;
+
+    ctx.save();
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = "cyan";
+    ctx.strokeStyle = "cyan";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x - 4, y - 4, size + 8, size + 8);
+    ctx.shadowBlur = 0;
+    ctx.imageSmoothingEnabled = false; // keep the squares sharp so phones can read it
+    ctx.drawImage(qrImage, x, y, size, size);
+
+    ctx.textAlign = "center";
+    ctx.font = "bold 18px Arial";
+    ctx.fillStyle = "cyan";
+    ctx.fillText("PLAY ON YOUR PHONE", x + size / 2, y - 14);
+    ctx.font = "13px Arial";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.fillText(PLAY_URL_TEXT, x + size / 2, y + size + 22);
+    ctx.restore();
+}
 
 
 export function renderWorld(ctx, state) {
@@ -324,8 +362,9 @@ export function renderStartScreen(ctx, state, buttonRect) {
     drawLeaderboard(ctx, state, canvas.width / 2, titleY + 115, buttonRect.y - 25);
     drawButton(ctx, buttonRect, "START", state.buttonHold / BUTTON_HOLD_FRAMES);
     if (state.soundStatus === "locked") {
-        drawFooter(ctx, "Press any key to turn on sound");
+        drawFooter(ctx, IS_PHONE ? "Tap the screen to turn on sound" : "Press any key to turn on sound");
     }
+    drawPhoneQr(ctx);
     drawSoundStatus(ctx, state);
     drawTrail(ctx, state);
 }
@@ -400,6 +439,7 @@ export function renderGameOverScreen(ctx, state, buttonRect) {
         drawCountdown(ctx, "Back to start in", GAME_OVER_TIMEOUT - state.handIdle, 5);
     }
     drawSoundStatus(ctx, state);
+    drawPhoneQr(ctx);
     drawTrail(ctx, state);
     drawConfetti(ctx, state);
 }
@@ -775,47 +815,113 @@ function drawBomb(ctx, state) {
 }
 
 // === BLADE TRAIL ===
-// Each segment is drawn separately so it can get thinner and dimmer toward the tail.
+// The trail's points are joined by a smooth curve, then drawn as one tapered ribbon: a wide
+// glow with a thin white-hot core, thick at the fingertip and fading to nothing at the tail.
+// Two filled shapes per frame (instead of two strokes per segment) is also cheaper to draw.
+const TRAIL_CURVE_STEPS = 4; // extra points added between each pair of trail points
+
 function drawTrail(ctx, state) {
-    const trail = state.trail;
-    if (trail.length < 2) return;
+    let points = smoothCurve(state.trail, TRAIL_CURVE_STEPS);
+    if (points.length < 2) return;
+    let width = state.powers.wide > 0 ? 1.8 : 1; // WIDE BLADE power-up
+    let tail = points[0];
+    let tip = points[points.length - 1];
 
     ctx.save();
-    ctx.lineCap = "round";
-    ctx.shadowColor = "cyan";
-    let width = state.powers.wide > 0 ? 1.8 : 1; // WIDE BLADE power-up
-
-    for (let i = 1; i < trail.length; i = i + 1) {
-        let t = i / (trail.length - 1); // 0 at the tail, 1 at the fingertip
-        let from = trail[i - 1];
-        let to = trail[i];
-
-        // outer glow: cyan, or a moving rainbow during FEVER
-        ctx.shadowBlur = 20 * t;
-        if (state.fever) {
-            let hue = Math.round((state.angle * 200 + i * 30) % 360);
-            ctx.shadowColor = "hsl(" + hue + ", 100%, 60%)";
-            ctx.strokeStyle = "hsla(" + hue + ", 100%, 60%, " + (0.8 * t) + ")";
-        } else {
-            ctx.strokeStyle = "rgba(0, 255, 255, " + (0.6 * t) + ")";
-        }
-        ctx.lineWidth = (2 + 14 * t) * width;
-        ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.stroke();
-
-        // hot white core
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = "rgba(255, 255, 255, " + t + ")";
-        ctx.lineWidth = (1 + 5 * t) * width;
-        ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.stroke();
+    // outer glow: cyan, or a moving rainbow during FEVER
+    let glow;
+    if (state.fever) {
+        // a rainbow running along the blade, shifting over time
+        let hue = Math.round((state.angle * 200) % 360);
+        glow = rainbowGradient(ctx, tail, tip, hue, 0.85);
+        ctx.shadowColor = "hsl(" + hue + ", 100%, 60%)";
+    } else {
+        glow = trailGradient(ctx, tail, tip, "rgba(0, 255, 255, ", 0.6);
+        ctx.shadowColor = "cyan";
     }
+    ctx.shadowBlur = 20;
+    fillRibbon(ctx, points, t => (1 + 7 * t) * width, glow);
 
+    // hot white core
+    ctx.shadowBlur = 0;
+    fillRibbon(ctx, points, t => (0.5 + 2.5 * t) * width, trailGradient(ctx, tail, tip, "rgba(255, 255, 255, ", 1));
     ctx.restore();
+}
+
+// Catmull-Rom curve through the points: passes through every one of them, with no corners.
+function smoothCurve(points, steps) {
+    if (points.length < 3) return points.slice();
+    let out = [];
+    for (let i = 0; i < points.length - 1; i = i + 1) {
+        let p0 = points[Math.max(0, i - 1)];
+        let p1 = points[i];
+        let p2 = points[i + 1];
+        let p3 = points[Math.min(points.length - 1, i + 2)];
+        for (let s = 0; s < steps; s = s + 1) {
+            let t = s / steps;
+            let t2 = t * t;
+            let t3 = t2 * t;
+            out.push({
+                x: 0.5 * (2 * p1.x + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+                y: 0.5 * (2 * p1.y + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
+            });
+        }
+    }
+    out.push(points[points.length - 1]);
+    return out;
+}
+
+// Transparent at the tail, `alpha` at the fingertip. `rgbaStart` is e.g. "rgba(0, 255, 255, ".
+function trailGradient(ctx, tail, tip, rgbaStart, alpha) {
+    if (Math.hypot(tip.x - tail.x, tip.y - tail.y) < 1) {
+        return rgbaStart + alpha + ")"; // finger hasn't moved: a gradient needs some length
+    }
+    let gradient = ctx.createLinearGradient(tail.x, tail.y, tip.x, tip.y);
+    gradient.addColorStop(0, rgbaStart + "0)");
+    gradient.addColorStop(1, rgbaStart + alpha + ")");
+    return gradient;
+}
+
+// FEVER: rainbow from tail to tip, fading in like the normal blade.
+function rainbowGradient(ctx, tail, tip, startHue, alpha) {
+    if (Math.hypot(tip.x - tail.x, tip.y - tail.y) < 1) {
+        return "hsla(" + startHue + ", 100%, 60%, " + alpha + ")";
+    }
+    let gradient = ctx.createLinearGradient(tail.x, tail.y, tip.x, tip.y);
+    for (let i = 0; i <= 4; i = i + 1) {
+        let t = i / 4;
+        gradient.addColorStop(t, "hsla(" + ((startHue + i * 70) % 360) + ", 100%, 60%, " + (alpha * t) + ")");
+    }
+    return gradient;
+}
+
+// One filled shape along the curve, `halfWidth(t)` wide at each point (t: 0 at the tail, 1 at the tip),
+// with a round end at the fingertip.
+function fillRibbon(ctx, points, halfWidth, fill) {
+    let left = [];
+    let right = [];
+    for (let i = 0; i < points.length; i = i + 1) {
+        let before = points[Math.max(0, i - 1)];
+        let after = points[Math.min(points.length - 1, i + 1)];
+        let dx = after.x - before.x;
+        let dy = after.y - before.y;
+        let length = Math.hypot(dx, dy) || 1;
+        let w = halfWidth(i / (points.length - 1));
+        left.push({ x: points[i].x - dy / length * w, y: points[i].y + dx / length * w });
+        right.push({ x: points[i].x + dy / length * w, y: points[i].y - dx / length * w });
+    }
+    let tip = points[points.length - 1];
+
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(left[0].x, left[0].y);
+    for (let i = 1; i < left.length; i = i + 1) ctx.lineTo(left[i].x, left[i].y);
+    for (let i = right.length - 1; i >= 0; i = i - 1) ctx.lineTo(right[i].x, right[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, halfWidth(1), 0, Math.PI * 2);
+    ctx.fill();
 }
 
 // Glowing particles are stamped from pre-drawn sprites (see perf.js); on LOW quality they're plain squares.

@@ -3,7 +3,7 @@
 //   WIDE BLADE bugs count as hit from further away (physics.js widens the hit box)
 //   MAGNET     nearby bugs drift towards your finger
 // Times are in 60fps frames, counted with `step` like everything else.
-import { segmentHitsBox, isOnScreen } from "./physics.js";
+import { segmentHitsBox, isOnScreen, spawnX } from "./physics.js";
 
 export const POWERUP_TYPES = {
     shield: { name: "SHIELD",     letter: "S", color: "cyan",    duration: 0 },
@@ -66,7 +66,7 @@ export function updatePowerups(state, width, height, step) {
 function spawnPowerup(state, width) {
     let kinds = Object.keys(POWERUP_TYPES);
     let kind = kinds[Math.floor(Math.random() * kinds.length)];
-    let baseX = WOBBLE + Math.random() * (width - POWERUP_SIZE - WOBBLE * 2);
+    let baseX = spawnX(width - WOBBLE * 2, POWERUP_SIZE) + WOBBLE; // the wobble stays inside the play area too
     state.powerups.push({ kind: kind, x: baseX, baseX: baseX, y: -POWERUP_SIZE, size: POWERUP_SIZE, age: 0 });
 }
 

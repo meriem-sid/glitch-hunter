@@ -15,10 +15,11 @@ import { startMusic, setMusicMood } from "./music.js";
 import { updatePowerups } from "./powerups.js";
 import { updateBoss } from "./boss.js";
 import { updateRunner } from "./runner.js";
+import { IS_PHONE, fitCanvas } from "./device.js";
+import { addScore } from "./leaderboard.js";
 
 const canvas = document.getElementById("gameCanvas");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+fitCanvas(canvas);
 const ctx = canvas.getContext("2d");
 
 const videoElement = document.getElementById("webcam");
@@ -32,16 +33,14 @@ const perfMonitor = createPerfMonitor();
 // Follow the window (F11 fullscreen, a resized window, a projector plugged in mid-event).
 // Everything on screen is scaled with it so bugs and bombs keep their place instead of
 // ending up off-screen or falling past the new bottom edge.
+// On phones this also fires when the phone is turned sideways.
 window.addEventListener("resize", () => {
     if (window.innerWidth === 0 || window.innerHeight === 0) return; // minimized: keep the old size
-    let scaleX = window.innerWidth / canvas.width;
-    let scaleY = window.innerHeight / canvas.height;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    scaleWorld(state, scaleX, scaleY);
+    let change = fitCanvas(canvas);
+    scaleWorld(state, change.x, change.y);
 });
 state.leaderboard = loadLeaderboard();
-startHandTracking(videoElement, canvas, state);
+startHandTracking(videoElement, canvas, state, document.getElementById("handView"));
 listenForKeys(canvas, state);
 listenForAudioUnlock();
 
@@ -77,6 +76,11 @@ function gameLoop(now = performance.now()) {
         if (state.screen === "gameover") {
             // the round just ended: ask for a name if the score made the top 10
             state.enteringName = qualifies(state.leaderboard, state.score);
+            if (state.enteringName && IS_PHONE) {
+                // a phone's leaderboard is just its owner's, and a canvas can't open the phone keyboard
+                state.enteringName = false;
+                addScore(state, "YOU");
+            }
             state.nameIdle = 0;
             state.handIdle = 0;
             // ...and celebrate a new #1 instead of the usual sad game over

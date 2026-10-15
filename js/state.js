@@ -1,5 +1,6 @@
 // All mutable game data lives here. Physics mutates it, the renderer only reads it.
 import { createRunner } from "./runner.js";
+import { createFingerFilter } from "./smoothing.js";
 
 export const ENTITY_SIZE = 40;
 export const TRAIL_LENGTH = 10;
@@ -7,11 +8,13 @@ export const STARTING_LIVES = 3;
 
 export function createState() {
     return {
-        finger: { x: 0, y: 0 },
+        finger: { x: 0, y: 0 },      // smoothed fingertip: where the blade is (see smoothing.js)
+        rawFinger: { x: 0, y: 0 },   // fingertip exactly as the camera last reported it
+        fingerFilter: createFingerFilter(),
         prevFinger: { x: 0, y: 0 }, // fingertip last frame, for swipe hits
         prevHandVisible: false,
-        bugs: [makeEntity(100, 0)],  // more join as the player improves (see physics.js)
-        bombs: [makeEntity(200, 0)],
+        bugs: [],   // falling bugs; the first ones are dropped in as the round starts (see physics.js)
+        bombs: [],
         score: 0,
         combo: 0,  // bugs sliced in a row; drives the score multiplier
         slices: 0, // total bugs sliced this round; drives the speed
@@ -76,7 +79,8 @@ export function makeEntity(x, y) {
 
 // Stretch every on-screen position after the canvas changes size.
 export function scaleWorld(state, scaleX, scaleY) {
-    let points = [state.finger, state.prevFinger]
+    state.fingerFilter.ready = false; // restart the smoothing at the new scale
+    let points = [state.finger, state.rawFinger, state.prevFinger]
         .concat(state.bugs, state.bombs, state.trail, state.particles, state.popups, state.debris, state.rings, state.confetti);
     for (let i = 0; i < points.length; i = i + 1) {
         points[i].x = points[i].x * scaleX;
@@ -103,8 +107,8 @@ function createSpellTimers() {
 
 // Start a fresh round. Finger, trail and background animation are kept so nothing jumps.
 export function resetRound(state) {
-    state.bugs = [makeEntity(100, 0)];
-    state.bombs = [makeEntity(200, 0)];
+    state.bugs = [];  // filled in on the first frame, at random spots inside the play area
+    state.bombs = [];
     state.score = 0;
     state.combo = 0;
     state.slices = 0;

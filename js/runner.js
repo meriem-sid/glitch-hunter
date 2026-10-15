@@ -19,7 +19,7 @@ const STRIPS = {
 // ^ set `frames` to how many frames each exported strip has
 
 const BASE_FILE = "assets/runner.png";
-const HEIGHT_SHARE = 0.2;    // drawn about this share of the screen height (rounded to whole pixels)
+const HEIGHT_SHARE = 0.2;    // drawn about this share of the screen's shorter side (rounded to whole pixels)
 const OPACITY = 0.9;
 // How he moves at each level (the last row that applies wins). fps: animation frames per second.
 const GAITS = [
@@ -169,7 +169,8 @@ export function drawRunner(ctx, state, placement = "center") {
 
     // place: bottom centre in play, off to the right on the start screen (the START button is in the middle)
     const canvas = ctx.canvas;
-    let scale = Math.max(2, Math.floor(canvas.height * HEIGHT_SHARE / height));
+    // sized by the screen's shorter side, so he isn't huge on a phone held upright
+    let scale = Math.max(2, Math.floor(Math.min(canvas.width, canvas.height) * HEIGHT_SHARE / height));
     let centerX = placement === "side" ? canvas.width * 0.85 : canvas.width / 2;
     let feetY = canvas.height - 12;
 

@@ -4,6 +4,7 @@ import { BUG_TYPES, chooseBugType } from "./enemies.js";
 import { shatterBug, updateDebris } from "./debris.js";
 import { QUALITY } from "./perf.js";
 import { getLevel, getGridSpeed } from "./theme.js";
+import { smoothFinger } from "./smoothing.js";
 
 const ARMOR_HIT_COOLDOWN = 15; // ~0.25 s before a cracked armored bug can be hit again
 const COMBO_STEP = 5;
@@ -14,6 +15,7 @@ const MAX_BUGS = 4;       // ...up to 4
 const BOMBS_EVERY = 20;   // one more bomb every 20 slices...
 const MAX_BOMBS = 3;      // ...up to 3
 const SPAWN_SPREAD = 250; // respawns start up to this many pixels above the screen, so arrivals are staggered
+const PLAY_MARGIN = 0.15; // nothing drops in the outer 15% on each side: the play area is the middle 70%
 const MAX_SWIPE_FRACTION = 0.5; // a fingertip jump wider than half the screen in one frame is a tracking glitch
 const SHOCKWAVE_RADIUS = 180;  // a bomb hit throws bugs this close away, and sets off other bombs
 const SHOCKWAVE_PUSH = 14;     // knockback speed right next to the blast, fading to 0 at the edge
@@ -30,6 +32,7 @@ const VOLATILE_BOSS_DAMAGE = 3; // a volatile blast that reaches the boss
 
 // Background animation and blade trail. Runs on every screen, not just during play.
 export function updateAmbient(state, step) {
+    smoothFinger(state, step); // the blade follows a smoothed fingertip
     state.gridOffset = state.gridOffset + getGridSpeed(state) * step;
     if (state.gridOffset > 1) {
         state.gridOffset = state.gridOffset - 1;
@@ -396,10 +399,18 @@ export function segmentHitsBox(seg, entity, margin = 0) {
     return true;
 }
 
+// A random x for something `size` wide to drop at, inside the middle of the screen: far edges are
+// awkward to reach with an arm, and the webcam preview and side panels cover parts of them.
+export function spawnX(width, size) {
+    let left = width * PLAY_MARGIN;
+    let right = width * (1 - PLAY_MARGIN) - size;
+    return left + Math.random() * Math.max(0, right - left);
+}
+
 // Send an entity back above the top of the screen. The random height, speed and spin
 // keep several of them from falling in step with each other.
 export function respawn(entity, width) {
-    entity.x = Math.random() * (width - entity.size); // fully on screen, never half off the right edge
+    entity.x = spawnX(width, entity.size);
     entity.y = -entity.size - Math.random() * SPAWN_SPREAD;
     entity.speed = 0.85 + Math.random() * 0.3;
     entity.spin = Math.random() * Math.PI * 2;
