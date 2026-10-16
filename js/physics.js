@@ -12,8 +12,10 @@ const MAX_MULTIPLIER = 5;
 const SLOW_TIME_SCALE = 0.4;
 const BUGS_EVERY = 8;     // one more bug on screen every 8 slices...
 const MAX_BUGS = 4;       // ...up to 4
-const BOMBS_EVERY = 20;   // one more bomb every 20 slices...
+const BOMBS_EVERY = 30;   // one more bomb every 30 slices...
 const MAX_BOMBS = 3;      // ...up to 3
+const SPEED_PER_SLICE = 0.1; // everything falls this much faster (px per frame) for each bug sliced...
+const MAX_EXTRA_SPEED = 6;   // ...up to this much faster than at the start
 const SPAWN_SPREAD = 250; // respawns start up to this many pixels above the screen, so arrivals are staggered
 const PLAY_MARGIN = 0.18; // nothing drops in the outer 18% on each side: the play area is the middle 64%
 const CENTER_BIAS = 0.5;  // share of drops that favour the middle; the rest spread evenly across the play area
@@ -60,8 +62,9 @@ export function update(state, width, height, step) {
     // speed ramps up with the number of bugs sliced (not score, which grows faster with combos)
     // TIME WARP spell slows everything down
     let timeScale = state.spells.slow.active > 0 ? SLOW_TIME_SCALE : 1;
-    let bugSpeed = (state.baseBugSpeed + (state.slices * (1/5))) * timeScale * step;
-    let bombSpeed = (state.baseBombSpeed + (state.slices * (1/5))) * timeScale * step;
+    let extraSpeed = Math.min(state.slices * SPEED_PER_SLICE, MAX_EXTRA_SPEED);
+    let bugSpeed = (state.baseBugSpeed + extraSpeed) * timeScale * step;
+    let bombSpeed = (state.baseBombSpeed + extraSpeed) * timeScale * step;
 
     // more bugs and bombs join as the player gets better
     addUntil(state.bugs, getBugCount(state), bug => respawnBug(state, bug, width));

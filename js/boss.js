@@ -7,15 +7,15 @@ import { makeEntity } from "./state.js";
 
 export const BOSS_EVERY = 5;       // levels
 const SIZE = 140;
-const BASE_HP = 20;                // the first boss takes 20 slices...
+const BASE_HP = 15;                // the first boss takes 15 slices...
 const HP_PER_BOSS = 10;            // ...each later one 10 more
 const ENTER_SPEED = 2;             // pixels per frame while sliding in from the top
 const HOVER_HEIGHT = 0.22;         // where it settles, as a share of the screen height
 const SWAY_SPEED = 0.02;
 const SWAY_WIDTH = 0.22;           // sways this share of the screen width either side of the centre (stays in the play area)
 const HIT_COOLDOWN = 10;           // one slash counts once, not on every frame it's inside the boss
-const DROP_EVERY = 120;            // drops a bomb every 2 s at full health...
-const DROP_MIN = 50;               // ...faster as it gets weaker, down to every 0.8 s
+const DROP_EVERY = 150;            // drops a bomb every 2.5 s at full health...
+const DROP_MIN = 70;               // ...faster as it gets weaker, down to every 1.2 s
 const REWARD = 500;                // points, times which boss this is
 
 export function updateBoss(state, width, height, step) {

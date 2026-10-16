@@ -18,7 +18,7 @@ const SPAWN_RULES = [
     { type: "gold",    chance: 0.04, unlocksAt: 3 },
     { type: "volatile",chance: 0.08, unlocksAt: 10 },
     { type: "armored", chance: 0.15, unlocksAt: 15 },
-    { type: "fast",    chance: 0.20, unlocksAt: 5 }
+    { type: "fast",    chance: 0.20, unlocksAt: 10 }
 ];
 
 // The rotation a bug is drawn at right now. Shared by the renderer and the slicing code

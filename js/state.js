@@ -36,7 +36,7 @@ export function createState() {
         bossesBeaten: 0,
         lives: STARTING_LIVES,
         baseBugSpeed: 5,
-        baseBombSpeed: 7,
+        baseBombSpeed: 6,
         particles: [],
         debris: [],          // pieces of sliced bugs (see debris.js)
         trail: [],
